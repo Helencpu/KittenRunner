@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Kitten Runner · 编程猫作品运行器</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root {
+    --bg: #0b0d12;
+    --panel: #13161f;
+    --line: #232838;
+    --text: #e6ebf5;
+    --muted: #8b96ad;
+    --brand: #ff7a3d;
+    --ok: #38d39f;
+    --err: #ff5f6d;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 system-ui, "Microsoft YaHei", sans-serif; overflow: hidden; }
+  .app { display: flex; flex-direction: column; height: 100%; }
+
+  header { display: flex; align-items: center; gap: 14px; padding: 10px 16px;
+    border-bottom: 1px solid var(--line); background: #0e1118; flex: 0 0 auto; }
+  .logo { font-weight: 700; letter-spacing: .02em; font-size: 15px; white-space: nowrap; }
+  .logo em { color: var(--brand); font-style: normal; }
+  .badge { font-size: 11px; color: var(--muted); border: 1px solid var(--line);
+    padding: 2px 8px; border-radius: 999px; }
+
+  main { flex: 1 1 auto; min-height: 0; position: relative; display: flex; }
+
+  /* 首页 */
+  #home { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    padding: 28px; overflow: auto; }
+  .home-card { width: min(880px, 100%); }
+  .lede { font-size: 26px; font-weight: 700; letter-spacing: -.01em; margin: 0 0 6px; }
+  .lede span { color: var(--brand); }
+  .sub { color: var(--muted); margin: 0 0 22px; font-size: 13px; }
+
+  .drop { border: 1.5px dashed #2c3447; border-radius: 14px; background: var(--panel);
+    padding: 38px 24px; text-align: center; transition: .18s; cursor: pointer; }
+  .drop.hot { border-color: var(--brand); background: #1a1620; transform: translateY(-1px); }
+  .drop .big { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+  .drop .hint { font-size: 12px; color: var(--muted); }
+  .drop .formats { margin-top: 10px; font-size: 11px; color: #6b7ager; color: #6b7488; }
+  #file { display: none; }
+
+  .row { display: flex; gap: 10px; margin-top: 18px; }
+  .input { flex: 1 1 auto; background: #10131b; border: 1px solid var(--line); color: var(--text);
+    border-radius: 10px; padding: 12px 14px; font-size: 13px; outline: none; }
+  .input:focus { border-color: #3b4560; }
+  .btn { border: 0; border-radius: 10px; padding: 12px 18px; font-size: 13px; font-weight: 600;
+    background: var(--brand); color: #1a0d06; cursor: pointer; white-space: nowrap; }
+  .btn:active { transform: translateY(1px); }
+  .btn.ghost { background: #1a1f2b; color: var(--text); border: 1px solid var(--line); }
+
+  .msg { margin-top: 12px; font-size: 13px; min-height: 20px; }
+  .msg.err { color: var(--err); }
+  .msg.ok { color: var(--ok); }
+
+  .recent { margin-top: 26px; }
+  .recent h3 { font-size: 12px; color: var(--muted); font-weight: 600; margin: 0 0 10px; letter-spacing: .06em; }
+  .recent-list { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { background: #151925; border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px;
+    font-size: 12px; cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip:hover { border-color: #3b4560; }
+  .chip i { font-style: normal; color: var(--muted); margin-left: 6px; font-size: 11px; }
+
+  /* 播放 */
+  #player { position: absolute; inset: 0; display: none; flex-direction: column; background: #000; }
+  .bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #0e1118;
+    border-bottom: 1px solid var(--line); flex: 0 0 auto; }
+  .bar .name { font-size: 13px; font-weight: 600; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar .tag { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 1px 7px; }
+  .bar .spacer { flex: 1 1 auto; }
+  .icon-btn { background: #1a1f2b; border: 1px solid var(--line); color: var(--text); border-radius: 8px;
+    padding: 6px 12px; font-size: 12px; cursor: pointer; }
+  .icon-btn:hover { border-color: #3b4560; }
+  .icon-btn.warn { color: var(--err); border-color: #4a2630; }
+  #frame { flex: 1 1 auto; border: 0; width: 100%; background: #000; }
+
+  /* 错误抽屉 */
+  #errbar { display: none; align-items: center; gap: 10px; padding: 7px 14px; background: #2a1216;
+    border-top: 1px solid #451a22; font-size: 12px; color: #ffb3b9; flex: 0 0 auto; cursor: pointer; }
+  #errbar b { color: var(--err); }
+  #drawer { position: absolute; right: 0; bottom: 0; width: min(560px, 92%); max-height: 62%;
+    background: #0f1219; border: 1px solid var(--line); border-right: 0; border-bottom: 0;
+    border-radius: 12px 0 0 0; display: none; flex-direction: column; z-index: 30; }
+  #drawer header { border-bottom: 1px solid var(--line); padding: 10px 14px; font-size: 12px; color: var(--muted); }
+  #drawer-body { overflow: auto; padding: 8px 12px 14px; font: 12px/1.55 Consolas, ui-monospace, monospace; }
+  .errow { padding: 7px 8px; border-radius: 7px; background: #151a24; margin-bottom: 6px; }
+  .errow .t { color: #7f8ea3; font-size: 11px; }
+  .errow .m { color: #ff9aa3; word-break: break-all; }
+
+  /* 拖拽全屏提示 */
+  #veil { position: fixed; inset: 0; background: rgba(255,122,61,.10); border: 2px dashed var(--brand);
+    display: none; align-items: center; justify-content: center; font-size: 18px; font-weight: 600;
+    color: #ffd0b8; z-index: 99; pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo">Kitten <em>Runner</em></div>
+    <div class="badge" id="ver">编程猫作品运行器</div>
+    <div class="spacer" style="flex:1"></div>
+    <div class="badge" id="sys">本地服务 · 就绪</div>
+  </header>
+
+  <main>
+    <section id="home">
+      <div class="home-card">
+        <h1 class="lede">把作品拖进来，<span>直接开玩</span></h1>
+        <p class="sub">支持 Kitten4（.bcm4）与 KittenN（.bcmkn）作品。积木出错不会中断，运行速度已优化。</p>
+
+        <div class="drop" id="drop">
+          <div class="big">拖拽作品文件到这里</div>
+          <div class="hint">或点击选择文件 · 也支持直接粘贴作品号</div>
+          <div class="formats">.bcm4 · .bcmkn · .bcmknk · .bcm</div>
+        </div>
+        <input type="file" id="file" accept=".bcm4,.bcmkn,.bcmknk,.bcmknh,.bcm,.json">
+
+        <div class="row">
+          <input class="input" id="online" placeholder="作品号 335327306，或 player.codemao.cn/new/335327306 链接">
+          <button class="btn" id="open-online">在线播放</button>
+        </div>
+        <div class="msg" id="msg"></div>
+
+        <div class="recent">
+          <h3>最近打开</h3>
+          <div class="recent-list" id="recent"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="player">
+      <div class="bar">
+        <button class="icon-btn" id="back">← 返回</button>
+        <div class="name" id="pname">作品</div>
+        <div class="tag" id="ptype">Kitten4</div>
+        <div class="spacer"></div>
+        <button class="icon-btn" id="reload">重载</button>
+        <button class="icon-btn" id="errbtn" style="display:none">错误 0</button>
+        <button class="icon-btn" id="full">全屏</button>
+      </div>
+      <iframe id="frame" allow="autoplay; fullscreen; clipboard-write"></iframe>
+      <div id="errbar"><b>积木运行异常</b><span id="errtxt"></span><span style="margin-left:auto">点此查看 →</span></div>
+    </section>
+
+    <div id="drawer">
+      <header style="display:flex;align-items:center">
+        <span>运行时异常（已隔离，作品继续运行）</span>
+        <span style="margin-left:auto;cursor:pointer" id="drawer-close">关闭</span>
+      </header>
+      <div id="drawer-body"></div>
+    </div>
+  </main>
+</div>
+<div id="veil">松手即运行</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { token: null, type: null, errors: [], polling: null };
+
+  var recent = [];
+  try { recent = JSON.parse(localStorage.getItem('kr:recent') || '[]'); } catch (_) {}
+  function pushRecent(item) {
+    recent = [item].concat(recent.filter(function (x) { return x.url !== item.url; })).slice(0, 8);
+    try { localStorage.setItem('kr:recent', JSON.stringify(recent)); } catch (_) {}
+    renderRecent();
+  }
+  function renderRecent() {
+    var box = $('recent');
+    box.innerHTML = '';
+    if (!recent.length) { box.innerHTML = '<span style="color:#6b7488;font-size:12px">还没有打开过作品</span>'; return; }
+    recent.forEach(function (r) {
+      var el = document.createElement('div');
+      el.className = 'chip';
+      el.textContent = r.name || '作品';
+      var i = document.createElement('i');
+      i.textContent = r.type === 'kn' ? 'N' : 'K4';
+      el.appendChild(i);
+      el.onclick = function () { location.href = r.url; };
+      box.appendChild(el);
+    });
+  }
+
+  function msg(t, cls) { var m = $('msg'); m.textContent = t || ''; m.className = 'msg' + (cls ? ' ' + cls : ''); }
+
+  // 首页徽标显示编译缓存与素材缓存状态
+  function refreshSys() {
+    fetch('/api/state').then(function (r) { return r.json(); }).then(function (s) {
+      var ir = s.ir || {};
+      var as = s.assets || {};
+      $('sys').textContent = '本地服务 · 就绪 · 编译缓存 ' + (ir.files || 0) + ' 份 · 命中 ' + (ir.hits || 0)
+        + ' · 素材 ' + (as.files || 0) + ' 个 · 本地命中 ' + (as.hits || 0);
+    }).catch(function () {});
+  }
+  refreshSys();
+
+  function upload(file) {
+    if (!file) return;
+    if (!/\.(bcm4|bcmkn|bcmknk|bcmknh|bcm|json)$/i.test(file.name)) {
+      return msg('不支持的格式：' + file.name, 'err');
+    }
+    msg('正在载入 ' + file.name + '…');
+    var fr = new FileReader();
+    fr.onload = function () {
+      fetch('/api/open-file?name=' + encodeURIComponent(file.name), { method: 'POST', body: fr.result })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (!j.ok) return msg(j.error || '打开失败', 'err');
+          pushRecent({ name: j.name, type: j.type, url: j.url });
+          location.href = j.url;
+        })
+        .catch(function (e) { msg('打开失败：' + e.message, 'err'); });
+    };
+    fr.onerror = function () { msg('读取文件失败', 'err'); };
+    fr.readAsArrayBuffer(file);
+  }
+
+  function openOnline() {
+    var v = $('online').value.trim();
+    if (!v) return msg('请输入作品号或链接', 'err');
+    msg('正在解析作品…');
+    fetch('/api/online', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input: v }) })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) return msg(j.error || '打开失败', 'err');
+        pushRecent({ name: j.name, type: j.type, url: j.url });
+        location.href = j.url;
+      })
+      .catch(function (e) { msg('打开失败：' + e.message, 'err'); });
+  }
+
+  // 拖拽
+  var dragDepth = 0;
+  document.addEventListener('dragenter', function (e) { e.preventDefault(); dragDepth++; $('veil').style.display = 'flex'; });
+  document.addEventListener('dragover', function (e) { e.preventDefault(); });
+  document.addEventListener('dragleave', function (e) { dragDepth--; if (dragDepth <= 0) { dragDepth = 0; $('veil').style.display = 'none'; } });
+  document.addEventListener('drop', function (e) {
+    e.preventDefault(); dragDepth = 0; $('veil').style.display = 'none';
+    var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) upload(f);
+  });
+  $('drop').onclick = function () { $('file').click(); };
+  $('file').onchange = function () { upload(this.files && this.files[0]); };
+  $('open-online').onclick = openOnline;
+  $('online').addEventListener('keydown', function (e) { if (e.key === 'Enter') openOnline(); });
+
+  // 播放页工具
+  $('back').onclick = function () { location.href = '/'; };
+  $('reload').onclick = function () { $('frame').contentWindow.location.reload(); };
+  $('full').onclick = function () {
+    var d = document.querySelector('.app');
+    if (!document.fullscreenElement) d.requestFullscreen && d.requestFullscreen();
+    else document.exitFullscreen && document.exitFullscreen();
+  };
+
+  function showErrorDrawer() {
+    var d = $('drawer');
+    d.style.display = 'flex';
+    var body = $('drawer-body');
+    body.innerHTML = '';
+    if (!state.errors.length) body.innerHTML = '<div class="errow">暂无异常</div>';
+    state.errors.slice().reverse().forEach(function (e) {
+      var row = document.createElement('div');
+      row.className = 'errow';
+      var t = document.createElement('div'); t.className = 't';
+      t.textContent = (e.time ? new Date(e.time).toLocaleTimeString() : '') + '  ' + (e.where || '') + (e.block ? ' · ' + e.block : '');
+      var m = document.createElement('div'); m.className = 'm'; m.textContent = e.message || String(e);
+      row.appendChild(t); row.appendChild(m); body.appendChild(row);
+    });
+  }
+  $('errbar').onclick = showErrorDrawer;
+  $('errbtn').onclick = showErrorDrawer;
+  $('drawer-close').onclick = function () { $('drawer').style.display = 'none'; };
+
+  // ---- 播放模式：/?token=xxx&type=kn|k4&name=xxx ----
+  (function bootPlayer() {
+    var qs = new URLSearchParams(location.search);
+    var token = qs.get('token');
+    if (!token) return;
+    var type = qs.get('type') || 'k4';
+    var name = qs.get('name') || '作品';
+    state.token = token;
+    state.type = type;
+    $('home').style.display = 'none';
+    $('player').style.display = 'flex';
+    $('pname').textContent = name;
+    $('ptype').textContent = type === 'kn' ? 'KittenN' : type === 'k4' ? 'Kitten4' : type;
+    $('frame').src = type === 'kn' ? '/player?workId=' + encodeURIComponent(token) : '/new/' + encodeURIComponent(token);
+    pushRecent({ name: name, type: type, url: '/play/' + token });
+
+    var seen = 0;
+    function syncErrors() {
+      fetch('/api/errors').then(function (r) { return r.json(); }).then(function (j) {
+        if (!j.ok) return;
+        state.errors = j.errors || [];
+        var n = state.errors.length;
+        if (n !== seen) {
+          seen = n;
+          $('errbtn').style.display = n ? 'inline-block' : 'none';
+          $('errbtn').textContent = '错误 ' + n;
+          $('errbar').style.display = n ? 'flex' : 'none';
+          $('errtxt').textContent = n ? ('已隔离 ' + n + ' 次，作品仍在运行') : '';
+          if ($('drawer').style.display === 'flex') showErrorDrawer();
+        }
+      }).catch(function () {});
+    }
+    syncErrors();
+    state.polling = setInterval(syncErrors, 1200);
+  })();
+
+  renderRecent();
+})();
+</script>
+</body>
+</html>
