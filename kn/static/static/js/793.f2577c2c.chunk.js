@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkneko=self.webpackChunkneko||[]).push([[793],{37793:function(e,n,s){s.r(n);var i=s(61510),o=s(90032),u=s(82688),c=s(80184);n.default=(0,o.Pi)((function(){return(0,c.jsx)(i.Z,{visible:u.Z.visible,onClose:function(){u.Z.close()},onSuccess:function(){u.Z.resolve(!0)},pageView:"bindPhone"})}))}}]);
+//# sourceMappingURL=793.f2577c2c.chunk.js.map
