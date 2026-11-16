@@ -1,0 +1,84 @@
+<!DOCTYPE HTML>
+<html lang="zh-CN">
+<head>
+<!--KNP_INJECT-->
+<meta charset="utf-8">
+<meta name="environment" content="production">
+<title>KittenN 播放器</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<meta name="full-screen" content="true">
+<meta name="screen-orientation" content="landscape">
+<meta name="x5-fullscreen" content="true">
+<link rel="stylesheet" href="/neko/static/css/main.09319456.css">
+<style>
+  html, body { height: 100%; margin: 0; background: #000; overflow: hidden; }
+  #root { height: 100%; }
+  #knp-boot { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: #0a0c10; color: #7f8ea3; font: 13px/1.6 system-ui, "Microsoft YaHei", sans-serif; z-index: 9999; }
+  #knp-boot.hide { display: none; }
+  .knp-spin { width: 22px; height: 22px; margin-right: 12px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,.12); border-top-color: #ff8a4c; animation: knp-rot .9s linear infinite; }
+  @keyframes knp-rot { to { transform: rotate(360deg); } }
+</style>
+<script src="/k4p/kn-net.js"></script>
+<script>
+  if (typeof globalThis === "undefined") window.globalThis = window;
+  window.__PAD_ZOOM__ = 1;
+  window.__IS_MOBILE__ = navigator.userAgent.match(/(iPhone|iPod|Android|ios|iOS|iPad|WebOS|Symbian|Windows Phone|Phone)/i)
+    || (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints && navigator.maxTouchPoints > 1);
+  window.__IS_PC__ = !__IS_MOBILE__;
+  window.__IS_MINIPROGRAM__ = false;
+  window.__NEKO_TIME_OBJ__ = { nekoInitTime: Date.now() };
+  window.__SHOW_SDK_LOG__ = false;
+  window.__SHOW_JUDGE_BLOCK_MESSAGE__ = false;
+  window.__SDK_INITIALIZED__ = false;
+  window.__KNP__ = window.__KNP__ || { ready: false, errors: [] };
+  window.addEventListener('error', function (e) {
+    try { window.__KNP__.errors.push(String((e && e.message) || e)); } catch (_) {}
+  });
+</script>
+</head>
+<body>
+<div id="root"></div>
+<div id="knp-boot"><div class="knp-spin"></div><span>正在载入作品…</span></div>
+<script type="text/javascript" src="/k4p/resilience.js"></script>
+<script type="text/javascript" src="/k4p/resilience-kn.js"></script>
+<script>
+  // 舞台就绪即撤掉加载蒙层（官方 SDK 会创建 STAGE_CANVAS）
+  (function () {
+    var boot = document.getElementById('knp-boot');
+    var t0 = Date.now();
+    var timer = setInterval(function () {
+      var ready = document.getElementById('STAGE_CANVAS')
+        || (window.__SDK_INITIALIZED__ && document.querySelector('#root canvas'))
+        || Date.now() - t0 > 25000;
+      if (ready) {
+        clearInterval(timer);
+        if (boot) boot.classList.add('hide');
+      }
+    }, 400);
+  })();
+  // 一键运行：舞台就绪后自动点掉官方的「点击播放」遮罩
+  (function autoStart() {
+    var tries = 0;
+    var timer = setInterval(function () {
+      var stage = document.getElementById('STAGE_CANVAS');
+      if (!stage) return;
+      var r = stage.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      var el = document.elementFromPoint(cx, cy);
+      if (!el) return;
+      if (el.tagName === 'CANVAS') { clearInterval(timer); return; }
+      if (++tries > 10) { clearInterval(timer); return; }
+      ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(function (k) {
+        var E = /pointer/.test(k) && window.PointerEvent ? PointerEvent : MouseEvent;
+        el.dispatchEvent(new E(k, { bubbles: true, cancelable: true, clientX: cx, clientY: cy, view: window }));
+      });
+    }, 700);
+  })();
+</script>
+<script defer="defer" src="/neko/static/js/main.0f3db563.js"></script>
+<script defer="defer" src="/k4p/kn-after.js"></script>
+</body>
+</html>
