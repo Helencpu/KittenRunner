@@ -3,6 +3,11 @@
 把 Kitten4 / KittenN 作品拖进窗口就能跑，积木报错也不中断，还能粘贴作品 ID 在线播放。
 参考项目：[Demgden/kitten4_player_pro](https://github.com/Demgden/kitten4_player_pro)（本项目未直接复用其 Electron 外壳，而是自己实现了一套零依赖的本地运行时）。
 
+> **想直接用？** 下载 [Release 完整包](https://github.com/Helencpu/KittenRunner/releases/latest)（38 MB，含内置 Node 运行时），解压后双击 `启动.bat` 即可，无需安装 Node。
+
+> 仓库源码副本不含 `runtime\node.exe`（82.9 MB，超出 GitHub 网页单文件上传上限 25 MB）。直接 clone 的源码请自行安装 Node 18+，`启动.bat` 会自动探测；或直接下 Release 包省事。
+
+
 ## 快速开始
 
 1. **不需要安装 Node.js** —— 项目自带 `runtime\node.exe`（v22.23.2）。
