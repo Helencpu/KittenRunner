@@ -492,6 +492,7 @@ class Server {
     if (p === '/k4p/resilience-kn.js') return this.sendFile(res, path.join(ROOT, 'patches', 'resilience-kn.js'), cors, { 'Content-Type': 'application/javascript; charset=utf-8' });
     if (p === '/k4p/kn-after.js') return this.sendFile(res, path.join(ROOT, 'patches', 'kn-after.js'), cors, { 'Content-Type': 'application/javascript; charset=utf-8' });
     if (p === '/k4p/kn-net.js') return this.sendFile(res, path.join(ROOT, 'patches', 'kn-net.js'), cors, { 'Content-Type': 'application/javascript; charset=utf-8' });
+    if (p === '/k4p/probe.js') return this.sendFile(res, path.join(ROOT, 'patches', 'probe.js'), cors, { 'Content-Type': 'application/javascript; charset=utf-8' });
 
     // 编译结果回传
     if (p === '/k4p/compile-result' && req.method === 'POST') return this.collectCompile(req, res, cors);
