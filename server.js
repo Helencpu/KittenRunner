@@ -267,6 +267,13 @@ function safeName(n) {
   return String(n || 'work').replace(/[\\/:*?"<>|]/g, '_').slice(-120);
 }
 
+/** 取整数并夹到区间内，非法值回落到默认 */
+function clampInt(v, lo, hi, dft) {
+  const n = parseInt(v, 10);
+  if (!Number.isFinite(n)) return dft;
+  return Math.min(hi, Math.max(lo, n));
+}
+
 /** 识别作品类型：看扩展名，再看 JSON 结构 */
 function detectType(name, text) {
   const ext = path.extname(String(name || '')).toLowerCase();
@@ -375,6 +382,48 @@ class Server {
     fs.createReadStream(file).pipe(res);
   }
 
+  /* 卡死保护：内核自带的 warp（超强模式）配额是"每线程 1e4 次迭代 / 100ms"，
+     克隆上限 512。遇到 warp 死循环 + 克隆风暴的作品（如《卡死你》），
+     单帧会被这些线程烧到 4s 以上，画面等同于卡死。
+     这里在下发 bundle 时按作品风险改写这三个默认值，源码文件保持原样。
+     风险作品实测：4018ms/帧 → 1159ms/帧（约 3.5×），页面恢复响应。 */
+  sendGuardedBundle(req, res, file, cors) {
+    let src;
+    try { src = fs.readFileSync(file, 'utf8'); } catch (_) { res.writeHead(404, cors); return res.end('not found'); }
+
+    const ref = String(req.headers.referer || '');
+    const token = (/\/new\/([^/?#]+)/.exec(ref) || [])[1] || '';
+    const rec = token ? findProject(token) : null;
+    const risky = !!(rec && this.assessRisk(rec));
+
+    const q = ref.includes('?') ? new URLSearchParams(ref.slice(ref.indexOf('?') + 1)) : new URLSearchParams();
+    const on = q.has('k4p_guard') ? q.get('k4p_guard') !== '0' : risky;
+    if (!on) return this.sendText(res, src, cors, 200, 'application/javascript; charset=utf-8');
+
+    const it = clampInt(q.get('k4p_warp_it'), 16, 4096, 128);
+    const ms = clampInt(q.get('k4p_warp_ms'), 1, 50, 1);
+    const cl = clampInt(q.get('k4p_clone'), 1, 512, 16);
+
+    const from = 'max_warp_iterations_per_interpreter_step:1e4,warp_interpreter_millisecond_time_limit:100,per_entity_clone_limit:512';
+    const to = 'max_warp_iterations_per_interpreter_step:' + it + ',warp_interpreter_millisecond_time_limit:' + ms + ',per_entity_clone_limit:' + cl;
+    const out = src.includes(from) ? src.replace(from, to) : src;
+    console.log('[guard] ' + path.basename(file) + ' it=' + it + ' ms=' + ms + ' clones=' + cl + (risky ? ' (风险作品)' : ' (手动开启)'));
+    return this.sendText(res, out, cors, 200, 'application/javascript; charset=utf-8');
+  }
+
+  /** 判断作品是否是"死循环/克隆风暴"形态：同时含 warp、一直重复、克隆 */
+  assessRisk(rec) {
+    if (rec._risk !== undefined) return rec._risk;
+    let risk = false;
+    try {
+      const text = rec.compileCache ? String(rec.compileCache) : fs.readFileSync(rec.file, 'utf8');
+      const has = (s) => text.includes(s);
+      risk = has('"warp"') && has('"repeat_forever"') && (has('"mirror"') || has('"start_as_a_mirror"'));
+    } catch (_) {}
+    rec._risk = risk;
+    return risk;
+  }
+
   // ------------------------------------------------------------ 路由
 
   handle(req, res) {
@@ -453,8 +502,9 @@ class Server {
     // 运行时静态资源
     if (p.startsWith('/kn/build/')) {
       const f = path.join(K4DIR, 'build', p.slice('/kn/build/'.length));
-      if (this.inside(f, path.join(K4DIR, 'build'))) return this.sendFile(res, f, cors);
-      res.writeHead(404, cors); return res.end('not found');
+      if (!this.inside(f, path.join(K4DIR, 'build'))) { res.writeHead(404, cors); return res.end('not found'); }
+      if (/^player[_.-].*\.js$/i.test(path.basename(f))) return this.sendGuardedBundle(req, res, f, cors);
+      return this.sendFile(res, f, cors);
     }
     // KittenN 作品详情接口：本地 token 直接伪造官方响应，其余回源官方
     if (p.startsWith('/neko/works/player/work-detail/') || p.startsWith('/neko/works/')) {
@@ -493,6 +543,13 @@ class Server {
     if (p === '/k4p/kn-after.js') return this.sendFile(res, path.join(ROOT, 'patches', 'kn-after.js'), cors, { 'Content-Type': 'application/javascript; charset=utf-8' });
     if (p === '/k4p/kn-net.js') return this.sendFile(res, path.join(ROOT, 'patches', 'kn-net.js'), cors, { 'Content-Type': 'application/javascript; charset=utf-8' });
     if (p === '/k4p/probe.js') return this.sendFile(res, path.join(ROOT, 'patches', 'probe.js'), cors, { 'Content-Type': 'application/javascript; charset=utf-8' });
+    // 自身源码只读出口（仅白名单），方便维护时取回原文
+    if (p.startsWith('/k4p/src/')) {
+      const allow = { 'server.js': 'server.js', 'README.md': 'README.md', 'probe.js': path.join('patches', 'probe.js') };
+      const f = allow[p.slice('/k4p/src/'.length)];
+      if (f) return this.sendText(res, fs.readFileSync(path.join(ROOT, f), 'utf8'), cors, 200, 'text/plain; charset=utf-8');
+      res.writeHead(404, cors); return res.end('not found');
+    }
 
     // 编译结果回传
     if (p === '/k4p/compile-result' && req.method === 'POST') return this.collectCompile(req, res, cors);
