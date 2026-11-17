@@ -79,8 +79,117 @@
 
   var tries = 0;
   var iv = setInterval(function () {
-    if (tryHook() || ++tries > 1200) clearInterval(iv);
+    if (tryHook() || ++tries > 6000) clearInterval(iv);
+    if (S.hooked && !S.scanned) scanWarp();
   }, 10);
+
+  /* ---------- 2a. warp 预算：扫描解释器实例并可选下调阈值 ---------- */
+  // 官方内核给 warp（超强模式）死循环留了保护：每步 1e4 次迭代 / 100ms。
+  // 但这是"每个线程"的额度，实体一多（11 个实体 = 1.1s/帧）整帧就被烧光。
+  // 这里能把额度调小，或由主进程在卡帧时自动下调，用于"卡死保护"。
+  function scanWarp() {
+    var rm = getRm();
+    if (!rm) return;
+    var found = [];
+    var walk = function (o, path, d) {
+      if (!o || typeof o !== 'object' || d > 3 || found.length > 40) return;
+      try {
+        if ('max_warp_iterations_per_interpreter_step' in o) {
+          found.push({ path: path, it: o.max_warp_iterations_per_interpreter_step, ms: o.warp_interpreter_millisecond_time_limit, obj: o });
+        }
+      } catch (e) {}
+      if (d === 3) return;
+      var ks; try { ks = Object.keys(o); } catch (e) { return; }
+      for (var i = 0; i < ks.length && found.length <= 40; i++) {
+        var v; try { v = o[ks[i]]; } catch (e) { continue; }
+        if (v && typeof v === 'object') walk(v, path + '.' + ks[i], d + 1);
+      }
+    };
+    walk(rm, 'rm', 0);
+    S.scanned = true;
+    var dk = Object.keys(rm);
+    var dump = { rm: dk, sizes: {} };
+    dk.forEach(function (k) {
+      try {
+        var v = rm[k];
+        if (v && typeof v === 'object') {
+          var ks = Object.keys(v);
+          dump.sizes[k] = ks.slice(0, 12).join(',');
+          if (Array.isArray(v)) dump.sizes[k] = 'array ' + v.length;
+        } else if (typeof v !== 'function') dump.sizes[k] = String(v).slice(0, 20);
+      } catch (e) {}
+    });
+    // 克隆上限：验证"克隆风暴"是不是真正的开销来源
+    var clones = [];
+    var cloneWalk = function (o, path, d) {
+      if (!o || typeof o !== 'object' || d > 3 || clones.length > 20) return;
+      try { if ('per_entity_clone_limit' in o) clones.push({ path: path, obj: o }); } catch (e) {}
+      if (d === 3) return;
+      var ks; try { ks = Object.keys(o); } catch (e) { return; }
+      for (var i = 0; i < ks.length && clones.length <= 20; i++) {
+        var v; try { v = o[ks[i]]; } catch (e) { continue; }
+        if (v && typeof v === 'object') cloneWalk(v, path + '.' + ks[i], d + 1);
+      }
+    };
+    cloneWalk(rm, 'rm', 0);
+    dump.clones = clones.map(function (c) { return c.path; });
+    var cl = parseFloat(matchParam('k4p_clone'));
+    if (cl > 0) clones.forEach(function (c) { c.obj.per_entity_clone_limit = cl; });
+    if (cl > 0) dump.cloneApplied = cl;
+    S.dump = dump;
+    S.warp = { count: found.length, list: found.map(function (f) { return f.path + '=' + f.it + '/' + f.ms; }) };
+
+    var it = parseFloat(matchParam('k4p_warp_it'));
+    var ms = parseFloat(matchParam('k4p_warp_ms'));
+    if (found.length && (it > 0 || ms > 0)) {
+      found.forEach(function (f) {
+        if (it > 0) f.obj.max_warp_iterations_per_interpreter_step = it;
+        if (ms > 0) f.obj.warp_interpreter_millisecond_time_limit = ms;
+      });
+      S.warp.applied = { it: it > 0 ? it : null, ms: ms > 0 ? ms : null };
+    }
+  }
+
+  function matchParam(name) {
+    var m = new RegExp('[?&]' + name + '=([^&]*)').exec(location.search);
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+
+  /* ---------- 2c. 帧耗时基准（?k4p_bench=1）----------
+   * 页面常在后台，rAF 会被节流，fps 读数不可信。
+   * 这里直接连续调用 run_mgr.update(N) 计时，得到与可见性无关的单帧脚本耗时。
+   */
+  if (/[?&]k4p_bench=1/.test(location.search)) {
+    var N = parseFloat(matchParam('k4p_bench_n')) || 200;
+    var benchDone = false;
+    var waitHook = setInterval(function () {
+      var rm = getRm();
+      if (!rm || typeof rm.update !== 'function' || ++tries > 6000) return;
+      clearInterval(waitHook);
+      setTimeout(function () {
+        try {
+          var t0 = performance.now(), times = [];
+          for (var i = 0; i < N; i++) {
+            var a = performance.now();
+            rm.update(16.67);
+            times.push(performance.now() - a);
+          }
+          var dt = performance.now() - t0;
+          times.sort(function (x, y) { return x - y; });
+          S.bench = {
+            n: N,
+            totalMs: Math.round(dt * 10) / 10,
+            perFrameMs: Math.round(dt / N * 1000) / 1000,
+            medMs: Math.round(times[Math.floor(times.length / 2)] * 10) / 10,
+            maxMs: Math.round(times[times.length - 1] * 10) / 10,
+          };
+        } catch (e) {
+          S.bench = { error: String(e && e.message || e) };
+        }
+        benchDone = true;
+      }, 8000);
+    }, 20);
+  }
 
   /* ---------- 2b. 画笔计数（?k4p_pen=1）---------- */
   if (/[?&]k4p_pen=1/.test(location.search)) {
@@ -178,6 +287,9 @@
     var json = '';
     try { json = JSON.stringify(S); } catch (e) { json = '{"err":"json"}'; }
     try { document.documentElement.setAttribute('data-k4p-probe', json); } catch (e) {}
+    // 页面被同步死循环占满时，隔离世界的脚本探针读不到 DOM 属性；
+    // 标题属于浏览器层，用 page_info 就能拿到，作为兜底通道。
+    if (json.length < 1200) { try { document.title = 'K4P' + json; } catch (e) {} }
     try { console.log('[k4p:probe]', json); } catch (e) {}
   }
   setInterval(publish, 500);
